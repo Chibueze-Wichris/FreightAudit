@@ -1,0 +1,5 @@
+reference,carrier,invoice_date,billed_total,linehaul,fuel_amount,fuel_percent,lane
+INV-1001,Northstar Freight,2026-11-01,1250.00,1000.00,250.00,25.00,ABJ-LAG
+INV-1002,Northstar Freight,2026-11-01,1200.00,1000.00,200.00,20.00,ABJ-KAN
+INV-1001,Northstar Freight,2026-11-01,1250.00,1000.00,250.00,25.00,ABJ-LAG
+INV-2001,Other Carrier,2026-11-02,900.00,700.00,200.00,28.57,LAG-ABJ

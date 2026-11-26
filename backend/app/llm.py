@@ -8,12 +8,67 @@ import urllib.error
 LAST_ERROR: str | None = None
 
 
+def _call_openrouter(prompt: str) -> dict | list | None:
+    global LAST_ERROR
+    api_key = os.getenv('OPENROUTER_API_KEY')
+    if not api_key:
+        return None
+    env_model = os.getenv('OPENROUTER_MODEL')
+    models = (
+        [env_model]
+        if env_model
+        else [
+            'qwen/qwen-2.5-72b-instruct:free',
+            'meta-llama/llama-3.3-70b-instruct:free',
+            'mistralai/mistral-small-3.1-24b-instruct:free',
+            'deepseek/deepseek-chat-v3-0324:free',
+            'openrouter/free',
+        ]
+    )
+    url = 'https://openrouter.ai/api/v1/chat/completions'
+    for model in models:
+        payload = {
+            'model': model,
+            'messages': [{'role': 'user', 'content': prompt}],
+            'temperature': 0.1,
+            'response_format': {'type': 'json_object'},
+        }
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {api_key}',
+            },
+            method='POST',
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+            text = data['choices'][0]['message']['content'].strip()
+            if text.startswith('```'):
+                text = text.split('\n', 1)[-1].rsplit('```', 1)[0].strip()
+            return json.loads(text)
+        except urllib.error.HTTPError as e:
+            body = e.read().decode('utf-8', errors='replace')[:300]
+            LAST_ERROR = f'OpenRouter ({model}) HTTP {e.code}: {body}'
+            continue
+        except Exception as e:
+            LAST_ERROR = f'OpenRouter ({model}) error: {e}'
+            continue
+    return None
+
+
 def _call_gemini(prompt: str) -> dict | list | None:
     global LAST_ERROR
     LAST_ERROR = None
+    res = _call_openrouter(prompt)
+    if res is not None:
+        return res
     api_key = os.getenv('GEMINI_API_KEY')
     if not api_key:
-        LAST_ERROR = 'GEMINI_API_KEY is not set'
+        if not LAST_ERROR:
+            LAST_ERROR = 'OPENROUTER_API_KEY and GEMINI_API_KEY are not set'
         return None
     env_model = os.getenv('GEMINI_MODEL')
     models = [env_model] if env_model else ['gemini-3.8-flash', 'gemini-3.8-pro', 'gemini-3.5-flash']

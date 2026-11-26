@@ -83,10 +83,10 @@ def parse_upload(name: str, content: bytes):
                 pages.append((page_no, text))
             rows = extract_invoice_pdf(pages)
             if not rows:
-                raise HTTPException(
-                    422,
-                    'Could not extract invoice rows from PDF. Ensure GEMINI_API_KEY is configured or export to CSV/XLSX.',
-                )
+                detail = 'Could not extract invoice rows from PDF.'
+                if llm.LAST_ERROR:
+                    detail = f'{detail} ({llm.LAST_ERROR})'
+                raise HTTPException(422, detail)
         else:
             raise HTTPException(415, 'Supported formats: CSV, XLSX, text-based PDF.')
     except HTTPException:

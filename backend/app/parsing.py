@@ -2,6 +2,7 @@ import csv, io, re, hashlib
 from pypdf import PdfReader
 from openpyxl import load_workbook
 from fastapi import HTTPException
+from . import llm
 from .llm import map_invoice_columns, extract_invoice_pdf, extract_invoice_spreadsheet
 
 ALIASES = {
@@ -118,4 +119,6 @@ def parse_upload(name: str, content: bytes):
                 ai_rows = extract_invoice_spreadsheet(raw_text)
                 if ai_rows:
                     return [normalize(r) for r in ai_rows]
+                if llm.LAST_ERROR:
+                    raise HTTPException(422, f'{first_err.detail} ({llm.LAST_ERROR})')
         raise

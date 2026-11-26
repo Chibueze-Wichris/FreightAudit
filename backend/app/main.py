@@ -16,7 +16,7 @@ from .parsing import parse_upload
 Base.metadata.create_all(bind=engine)
 app=FastAPI(title='FreightAudit AI', version='0.1.0')
 origins=os.getenv('CORS_ORIGINS','http://localhost:3000').split(',')
-app.add_middleware(CORSMiddleware,allow_origins=origins,allow_origin_regex=r'https://.*\.e2b\.app',allow_credentials=True,allow_methods=['*'],allow_headers=['*'])
+app.add_middleware(CORSMiddleware,allow_origins=origins,allow_origin_regex=r'https://.*\.(e2b\.app|vercel\.app)',allow_credentials=True,allow_methods=['*'],allow_headers=['*'])
 passwords=PasswordHash.recommended(); SECRET=os.getenv('JWT_SECRET')
 def db():
     s=SessionLocal()

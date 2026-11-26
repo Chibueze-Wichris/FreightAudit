@@ -15,8 +15,8 @@ def _call_gemini(prompt: str) -> dict | list | None:
     if not api_key:
         LAST_ERROR = 'GEMINI_API_KEY is not set'
         return None
-    model = os.getenv('GEMINI_MODEL', 'gemini-3.8-flash')
-    url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}'
+    env_model = os.getenv('GEMINI_MODEL')
+    models = [env_model] if env_model else ['gemini-3.8-flash', 'gemini-3.8-pro', 'gemini-3.5-flash']
     payload = {
         'contents': [{'parts': [{'text': prompt}]}],
         'generationConfig': {
@@ -24,28 +24,34 @@ def _call_gemini(prompt: str) -> dict | list | None:
             'temperature': 0.1,
         },
     }
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode('utf-8'),
-        headers={'Content-Type': 'application/json'},
-        method='POST',
-    )
-    for attempt in range(3):
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.loads(resp.read().decode('utf-8'))
-            text = data['candidates'][0]['content']['parts'][0]['text']
-            return json.loads(text)
-        except urllib.error.HTTPError as e:
-            body = e.read().decode('utf-8', errors='replace')[:300]
-            LAST_ERROR = f'Gemini HTTP {e.code}: {body}'
-            if e.code in (429, 503) and attempt < 2:
-                time.sleep(1.5 * (attempt + 1))
-                continue
-            return None
-        except Exception as e:
-            LAST_ERROR = f'Gemini error: {e}'
-            return None
+    data_bytes = json.dumps(payload).encode('utf-8')
+    for model in models:
+        url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}'
+        for attempt in range(2):
+            req = urllib.request.Request(
+                url,
+                data=data_bytes,
+                headers={'Content-Type': 'application/json'},
+                method='POST',
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    data = json.loads(resp.read().decode('utf-8'))
+                text = data['candidates'][0]['content']['parts'][0]['text']
+                return json.loads(text)
+            except urllib.error.HTTPError as e:
+                body = e.read().decode('utf-8', errors='replace')[:300]
+                LAST_ERROR = f'Gemini ({model}) HTTP {e.code}: {body}'
+                if e.code in (429, 503) and attempt == 0:
+                    time.sleep(1.5)
+                    continue
+                if e.code in (404, 429, 503):
+                    break  # try next fallback model
+                return None
+            except Exception as e:
+                LAST_ERROR = f'Gemini ({model}) error: {e}'
+                return None
+    return None
 
 
 def extract_contract_terms(pages: list[tuple[int, str]], carrier: str) -> dict | None:

@@ -26,7 +26,7 @@ ALIASES = {
     'fuel_percent': 'fuel_percent', 'fuel_pct': 'fuel_percent', 'fsc_percent': 'fuel_percent', 'fsc_pct': 'fuel_percent',
     'lane': 'lane', 'route': 'lane',
 }
-REQUIRED = {'billed_total'}
+REQUIRED = set()
 
 
 def normalize(r, column_map: dict[str, str] | None = None, default_ref: str = 'INV-UNKNOWN'):

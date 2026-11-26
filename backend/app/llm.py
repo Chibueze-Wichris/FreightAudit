@@ -35,7 +35,7 @@ def _call_gemini(prompt: str) -> dict | list | None:
                 method='POST',
             )
             try:
-                with urllib.request.urlopen(req, timeout=30) as resp:
+                with urllib.request.urlopen(req, timeout=15) as resp:
                     data = json.loads(resp.read().decode('utf-8'))
                 text = data['candidates'][0]['content']['parts'][0]['text']
                 return json.loads(text)
@@ -50,7 +50,7 @@ def _call_gemini(prompt: str) -> dict | list | None:
                 return None
             except Exception as e:
                 LAST_ERROR = f'Gemini ({model}) error: {e}'
-                return None
+                break  # try next fallback model on timeout/network error
     return None
 
 

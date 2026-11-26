@@ -47,6 +47,7 @@ def normalize(r, column_map: dict[str, str] | None = None, default_ref: str = 'I
     missing = REQUIRED - row.keys()
     if missing:
         raise HTTPException(422, 'Missing required columns: ' + ', '.join(sorted(missing)))
+    row.setdefault('billed_total', 0.0)
     row.setdefault('reference', default_ref)
     row.setdefault('carrier', 'Unknown Carrier')
     row.setdefault('invoice_date', date.today().isoformat())

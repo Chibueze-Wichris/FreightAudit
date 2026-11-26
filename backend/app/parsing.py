@@ -1,4 +1,5 @@
 import csv, io, re, hashlib
+from datetime import date
 from pypdf import PdfReader
 from openpyxl import load_workbook
 from fastapi import HTTPException
@@ -25,10 +26,10 @@ ALIASES = {
     'fuel_percent': 'fuel_percent', 'fuel_pct': 'fuel_percent', 'fsc_percent': 'fuel_percent', 'fsc_pct': 'fuel_percent',
     'lane': 'lane', 'route': 'lane',
 }
-REQUIRED = {'reference', 'carrier', 'invoice_date', 'billed_total'}
+REQUIRED = {'billed_total'}
 
 
-def normalize(r, column_map: dict[str, str] | None = None):
+def normalize(r, column_map: dict[str, str] | None = None, default_ref: str = 'INV-UNKNOWN'):
     row = {}
     for k, v in r.items():
         if column_map and str(k) in column_map:
@@ -46,6 +47,10 @@ def normalize(r, column_map: dict[str, str] | None = None):
     missing = REQUIRED - row.keys()
     if missing:
         raise HTTPException(422, 'Missing required columns: ' + ', '.join(sorted(missing)))
+    row.setdefault('billed_total', 0.0)
+    row.setdefault('reference', default_ref)
+    row.setdefault('carrier', 'Unknown Carrier')
+    row.setdefault('invoice_date', date.today().isoformat())
     row.setdefault('linehaul', 0.0)
     row.setdefault('fuel_amount', 0.0)
     row.setdefault('fuel_percent', 0.0)
@@ -99,26 +104,18 @@ def parse_upload(name: str, content: bytes):
     if len(rows) > 5000:
         raise HTTPException(413, 'A file may contain at most 5,000 invoice rows.')
 
-    try:
-        return [normalize(r) for r in rows]
-    except HTTPException as first_err:
-        if 'Missing required columns' in str(first_err.detail):
-            if headers and any(h.strip() for h in headers):
-                ai_map = map_invoice_columns(headers, rows[:3])
-                if ai_map:
-                    try:
-                        return [normalize(r, column_map=ai_map) for r in rows]
-                    except HTTPException:
-                        pass
-            if ext in ('csv', 'xlsx', 'xlsm'):
-                raw_text = (
-                    content.decode('utf-8-sig')[:15000]
-                    if ext == 'csv'
-                    else '\n'.join(','.join(str(c or '') for c in r) for r in vals[:100])
-                )
-                ai_rows = extract_invoice_spreadsheet(raw_text)
-                if ai_rows:
-                    return [normalize(r) for r in ai_rows]
-                if llm.LAST_ERROR:
-                    raise HTTPException(422, f'{first_err.detail} ({llm.LAST_ERROR})')
-        raise
+    if ext in ('csv', 'xlsx', 'xlsm'):
+        raw_text = (
+            content.decode('utf-8-sig')[:15000]
+            if ext == 'csv'
+            else '\n'.join(','.join(str(c or '') for c in r) for r in vals[:100])
+        )
+        ai_rows = extract_invoice_spreadsheet(raw_text)
+        if ai_rows:
+            return [normalize(r, default_ref=name) for r in ai_rows]
+        if headers and any(h.strip() for h in headers):
+            ai_map = map_invoice_columns(headers, rows[:3])
+            if ai_map:
+                return [normalize(r, column_map=ai_map, default_ref=name) for r in rows]
+
+    return [normalize(r, default_ref=name) for r in rows]

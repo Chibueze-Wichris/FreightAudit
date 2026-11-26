@@ -8,23 +8,35 @@ import urllib.error
 LAST_ERROR: str | None = None
 
 
+_FREE_MODELS_CACHE: tuple[float, list[str]] | None = None
+
+
+def _get_free_openrouter_models() -> list[str]:
+    global _FREE_MODELS_CACHE
+    now = time.time()
+    if _FREE_MODELS_CACHE and now - _FREE_MODELS_CACHE[0] < 600:
+        return _FREE_MODELS_CACHE[1]
+    try:
+        req = urllib.request.Request('https://openrouter.ai/api/v1/models', method='GET')
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+        free_ids = [m['id'] for m in data.get('data', []) if str(m.get('id', '')).endswith(':free')]
+        preferred = [m for m in free_ids if 'qwen' in m.lower() or 'llama' in m.lower()]
+        others = [m for m in free_ids if m not in preferred]
+        models = (preferred + others)[:6] + ['openrouter/free']
+        _FREE_MODELS_CACHE = (now, models)
+        return models
+    except Exception:
+        return ['openrouter/free']
+
+
 def _call_openrouter(prompt: str) -> dict | list | None:
     global LAST_ERROR
     api_key = os.getenv('OPENROUTER_API_KEY')
     if not api_key:
         return None
     env_model = os.getenv('OPENROUTER_MODEL')
-    models = (
-        [env_model]
-        if env_model
-        else [
-            'qwen/qwen-2.5-72b-instruct:free',
-            'meta-llama/llama-3.3-70b-instruct:free',
-            'mistralai/mistral-small-3.1-24b-instruct:free',
-            'deepseek/deepseek-chat-v3-0324:free',
-            'openrouter/free',
-        ]
-    )
+    models = [env_model] if env_model else _get_free_openrouter_models()
     url = 'https://openrouter.ai/api/v1/chat/completions'
     for model in models:
         payload = {

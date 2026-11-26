@@ -1,5 +1,6 @@
 import json
 import os
+import time
 import urllib.request
 import urllib.error
 
@@ -29,18 +30,22 @@ def _call_gemini(prompt: str) -> dict | list | None:
         headers={'Content-Type': 'application/json'},
         method='POST',
     )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-        text = data['candidates'][0]['content']['parts'][0]['text']
-        return json.loads(text)
-    except urllib.error.HTTPError as e:
-        body = e.read().decode('utf-8', errors='replace')[:300]
-        LAST_ERROR = f'Gemini HTTP {e.code}: {body}'
-        return None
-    except Exception as e:
-        LAST_ERROR = f'Gemini error: {e}'
-        return None
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+            text = data['candidates'][0]['content']['parts'][0]['text']
+            return json.loads(text)
+        except urllib.error.HTTPError as e:
+            body = e.read().decode('utf-8', errors='replace')[:300]
+            LAST_ERROR = f'Gemini HTTP {e.code}: {body}'
+            if e.code in (429, 503) and attempt < 2:
+                time.sleep(1.5 * (attempt + 1))
+                continue
+            return None
+        except Exception as e:
+            LAST_ERROR = f'Gemini error: {e}'
+            return None
 
 
 def extract_contract_terms(pages: list[tuple[int, str]], carrier: str) -> dict | None:

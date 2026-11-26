@@ -61,17 +61,26 @@ async def propose_contract(carrier:str=Form(...),file:UploadFile=File(...),s:Ses
     if len(raw)>25*1024*1024: raise HTTPException(413,'Maximum file size is 25 MB')
     if not (file.filename or '').lower().endswith('.pdf'): raise HTTPException(415,'Upload a text-based PDF rate sheet')
     from pypdf import PdfReader
+    from .llm import extract_contract_terms
     try:
-        reader=PdfReader(io.BytesIO(raw)); proposed=None; page_no=None
+        reader=PdfReader(io.BytesIO(raw)); proposed=None; page_no=None; pages=[]
         pattern=re.compile(r'(?:fuel\s*(?:surcharge|adjustment|rate)?|fuel\s+index)[^\n%]{0,70}?(\d+(?:\.\d+)?)\s*(?:%|percent)',re.I)
         for idx,page in enumerate(reader.pages,1):
             text=page.extract_text() or ''
             if not text.strip(): raise HTTPException(422,f'Page {idx} has no selectable text. Scanned PDFs are not supported.')
-            match=pattern.search(text)
-            if match: proposed=float(match.group(1));page_no=idx;break
+            pages.append((idx, text))
+        ai_terms = extract_contract_terms(pages, carrier.strip())
+        if ai_terms:
+            terms = {k: v for k, v in ai_terms.items() if v is not None}
+            terms['review_required'] = True
+        else:
+            for idx, text in pages:
+                match=pattern.search(text)
+                if match: proposed=float(match.group(1));page_no=idx;break
+            terms = {'fuel_percent':proposed,'proposal_page':page_no,'review_required':True}
     except HTTPException: raise
     except Exception as e: raise HTTPException(422,f'Could not read rate sheet: {e}')
-    c=m.Contract(carrier=carrier.strip(),source_name=file.filename or 'Uploaded rate sheet',status='draft',terms={'fuel_percent':proposed,'proposal_page':page_no,'review_required':True})
+    c=m.Contract(carrier=carrier.strip(),source_name=file.filename or 'Uploaded rate sheet',status='draft',terms=terms)
     s.add(c);s.commit();s.refresh(c);return {**contract_out(c),'proposal_note':'Rule-based text proposal only. Verify the rate and cited page before approval.'}
 @app.get('/contracts')
 def contracts(s:Session=Depends(db),u:m.User=Depends(actor)): return [contract_out(x) for x in s.query(m.Contract).order_by(m.Contract.id.desc()).all()]

@@ -160,6 +160,18 @@ Sample rows: {json.dumps(sample_rows[:3], default=str)}
     return {str(k): str(v) for k, v in res.items()} if isinstance(res, dict) else None
 
 
+def _unwrap_list(res: dict | list | None) -> list[dict] | None:
+    if isinstance(res, list):
+        return res
+    if isinstance(res, dict):
+        for v in res.values():
+            if isinstance(v, list):
+                return v
+        if any(k in res for k in ('reference', 'billed_total', 'carrier')):
+            return [res]
+    return None
+
+
 def extract_invoice_pdf(pages: list[tuple[int, str]]) -> list[dict] | None:
     snippet = '\n\n'.join(f'--- PAGE {p} ---\n{txt[:5000]}' for p, txt in pages[:5])
     prompt = f"""You are a freight invoice extractor.

@@ -4,9 +4,15 @@ import urllib.request
 import urllib.error
 
 
+LAST_ERROR: str | None = None
+
+
 def _call_gemini(prompt: str) -> dict | list | None:
+    global LAST_ERROR
+    LAST_ERROR = None
     api_key = os.getenv('GEMINI_API_KEY')
     if not api_key:
+        LAST_ERROR = 'GEMINI_API_KEY is not set'
         return None
     model = os.getenv('GEMINI_MODEL', 'gemini-2.5-flash')
     url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}'
@@ -28,7 +34,12 @@ def _call_gemini(prompt: str) -> dict | list | None:
             data = json.loads(resp.read().decode('utf-8'))
         text = data['candidates'][0]['content']['parts'][0]['text']
         return json.loads(text)
-    except (urllib.error.URLError, KeyError, IndexError, json.JSONDecodeError, TimeoutError):
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8', errors='replace')[:300]
+        LAST_ERROR = f'Gemini HTTP {e.code}: {body}'
+        return None
+    except Exception as e:
+        LAST_ERROR = f'Gemini error: {e}'
         return None
 
 

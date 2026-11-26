@@ -104,26 +104,18 @@ def parse_upload(name: str, content: bytes):
     if len(rows) > 5000:
         raise HTTPException(413, 'A file may contain at most 5,000 invoice rows.')
 
-    try:
-        return [normalize(r, default_ref=name) for r in rows]
-    except HTTPException as first_err:
-        if 'Missing required columns' in str(first_err.detail):
-            if headers and any(h.strip() for h in headers):
-                ai_map = map_invoice_columns(headers, rows[:3])
-                if ai_map:
-                    try:
-                        return [normalize(r, column_map=ai_map, default_ref=name) for r in rows]
-                    except HTTPException:
-                        pass
-            if ext in ('csv', 'xlsx', 'xlsm'):
-                raw_text = (
-                    content.decode('utf-8-sig')[:15000]
-                    if ext == 'csv'
-                    else '\n'.join(','.join(str(c or '') for c in r) for r in vals[:100])
-                )
-                ai_rows = extract_invoice_spreadsheet(raw_text)
-                if ai_rows:
-                    return [normalize(r, default_ref=name) for r in ai_rows]
-                if llm.LAST_ERROR:
-                    raise HTTPException(422, f'{first_err.detail} ({llm.LAST_ERROR})')
-        raise
+    if ext in ('csv', 'xlsx', 'xlsm'):
+        raw_text = (
+            content.decode('utf-8-sig')[:15000]
+            if ext == 'csv'
+            else '\n'.join(','.join(str(c or '') for c in r) for r in vals[:100])
+        )
+        ai_rows = extract_invoice_spreadsheet(raw_text)
+        if ai_rows:
+            return [normalize(r, default_ref=name) for r in ai_rows]
+        if headers and any(h.strip() for h in headers):
+            ai_map = map_invoice_columns(headers, rows[:3])
+            if ai_map:
+                return [normalize(r, column_map=ai_map, default_ref=name) for r in rows]
+
+    return [normalize(r, default_ref=name) for r in rows]

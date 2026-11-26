@@ -91,3 +91,23 @@ Document:
 """
     res = _call_gemini(prompt)
     return res if isinstance(res, list) else None
+
+
+def extract_invoice_spreadsheet(raw_text: str) -> list[dict] | None:
+    prompt = f"""You are a freight invoice extractor.
+The following CSV or spreadsheet text may be a visual invoice template (with blank rows, metadata at the top, and line items below) rather than a flat table.
+Extract the freight invoice(s) from it and return a JSON array of objects, each with:
+- "reference": string (invoice number / PRO / BOL)
+- "carrier": string (carrier, logistics company, or vendor name)
+- "invoice_date": string (YYYY-MM-DD format)
+- "billed_total": number (grand total / total amount billed)
+- "linehaul": number (base freight charge, or 0 if not listed)
+- "fuel_amount": number (fuel surcharge amount, or 0 if not listed)
+- "fuel_percent": number (fuel surcharge %, or 0 if not listed)
+- "lane": string (origin-destination, or "")
+
+Spreadsheet text:
+{raw_text[:15000]}
+"""
+    res = _call_gemini(prompt)
+    return res if isinstance(res, list) else None

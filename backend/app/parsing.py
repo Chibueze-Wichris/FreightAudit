@@ -2,7 +2,7 @@ import csv, io, re, hashlib
 from pypdf import PdfReader
 from openpyxl import load_workbook
 from fastapi import HTTPException
-from .llm import map_invoice_columns, extract_invoice_pdf
+from .llm import map_invoice_columns, extract_invoice_pdf, extract_invoice_spreadsheet
 
 ALIASES = {
     'invoice': 'reference', 'invoice_number': 'reference', 'invoice_no': 'reference',
@@ -101,8 +101,21 @@ def parse_upload(name: str, content: bytes):
     try:
         return [normalize(r) for r in rows]
     except HTTPException as first_err:
-        if headers and 'Missing required columns' in str(first_err.detail):
-            ai_map = map_invoice_columns(headers, rows[:3])
-            if ai_map:
-                return [normalize(r, column_map=ai_map) for r in rows]
+        if 'Missing required columns' in str(first_err.detail):
+            if headers and any(h.strip() for h in headers):
+                ai_map = map_invoice_columns(headers, rows[:3])
+                if ai_map:
+                    try:
+                        return [normalize(r, column_map=ai_map) for r in rows]
+                    except HTTPException:
+                        pass
+            if ext in ('csv', 'xlsx', 'xlsm'):
+                raw_text = (
+                    content.decode('utf-8-sig')[:15000]
+                    if ext == 'csv'
+                    else '\n'.join(','.join(str(c or '') for c in r) for r in vals[:100])
+                )
+                ai_rows = extract_invoice_spreadsheet(raw_text)
+                if ai_rows:
+                    return [normalize(r) for r in ai_rows]
         raise

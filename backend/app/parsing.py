@@ -105,11 +105,12 @@ def parse_upload(name: str, content: bytes):
         raise HTTPException(413, 'A file may contain at most 5,000 invoice rows.')
 
     if ext in ('csv', 'xlsx', 'xlsm'):
-        raw_text = (
-            content.decode('utf-8-sig')[:15000]
+        raw_lines = (
+            content.decode('utf-8-sig').splitlines()
             if ext == 'csv'
-            else '\n'.join(','.join(str(c or '') for c in r) for r in vals[:100])
+            else [','.join(str(c or '') for c in r) for r in vals[:120]]
         )
+        raw_text = '\n'.join(ln for ln in raw_lines if ln.replace(',', '').strip())[:15000]
         ai_rows = extract_invoice_spreadsheet(raw_text)
         if ai_rows:
             return [normalize(r, default_ref=name) for r in ai_rows]
@@ -118,4 +119,7 @@ def parse_upload(name: str, content: bytes):
             if ai_map:
                 return [normalize(r, column_map=ai_map, default_ref=name) for r in rows]
 
-    return [normalize(r, default_ref=name) for r in rows]
+    normalized = [normalize(r, default_ref=name) for r in rows]
+    if all(r['billed_total'] == 0.0 for r in normalized) and llm.LAST_ERROR:
+        raise HTTPException(422, f'AI extraction failed: {llm.LAST_ERROR}')
+    return normalized

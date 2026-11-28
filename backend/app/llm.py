@@ -55,11 +55,15 @@ def _call_openrouter(prompt: str) -> dict | list | None:
             method='POST',
         )
         try:
-            with urllib.request.urlopen(req, timeout=20) as resp:
+            with urllib.request.urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read().decode('utf-8'))
             text = data['choices'][0]['message']['content'].strip()
             if text.startswith('```'):
                 text = text.split('\n', 1)[-1].rsplit('```', 1)[0].strip()
+            start = min((i for i in (text.find('['), text.find('{')) if i != -1), default=0)
+            end = max(text.rfind(']'), text.rfind('}'))
+            if end > start:
+                text = text[start:end + 1]
             return json.loads(text)
         except urllib.error.HTTPError as e:
             body = e.read().decode('utf-8', errors='replace')[:300]

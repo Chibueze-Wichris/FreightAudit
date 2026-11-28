@@ -120,6 +120,6 @@ def parse_upload(name: str, content: bytes):
                 return [normalize(r, column_map=ai_map, default_ref=name) for r in rows]
 
     normalized = [normalize(r, default_ref=name) for r in rows]
-    if all(r['billed_total'] == 0.0 for r in normalized) and llm.LAST_ERROR:
-        raise HTTPException(422, f'AI extraction failed: {llm.LAST_ERROR}')
+    if all(r['billed_total'] == 0.0 for r in normalized):
+        raise HTTPException(422, f"AI extraction failed: {llm.LAST_ERROR or 'Model returned no invoice rows'}")
     return normalized
